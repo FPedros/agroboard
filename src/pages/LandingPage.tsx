@@ -19,27 +19,18 @@ const LandingPage = () => {
   const { setUser } = useUser();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-  const [error, setError] = useState("");
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const handleEntrar = (e: React.FormEvent) => {
     e.preventDefault();
-    const normalizedEmail = email.trim().toLowerCase();
-    const isValidUser =
-      normalizedEmail === "teste@agroconsult.com.br" && (senha === "1234" || senha === "Agro#2025!");
+    const normalizedEmail = email.trim().toLowerCase() || "mock@agroboard.local";
 
-    if (isValidUser) {
-      setUser({
-        firstName: "Teste",
-        lastName: "Agroconsult",
-        email: "teste@agroconsult.com.br",
-      });
-      setError("");
-      navigate("/app");
-      return;
-    }
-
-    setError("E-mail ou senha inválidos.");
+    setUser({
+      firstName: "Fernando",
+      lastName: "Sousa",
+      email: normalizedEmail,
+    });
+    navigate("/app");
   };
 
   useEffect(() => {
@@ -183,7 +174,6 @@ const LandingPage = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="bg-white/5 border-white/15 text-white placeholder:text-white/45 focus:ring-[#78FFD2]/60 focus:border-[#78FFD2]/40"
-                  required
                 />
               </div>
 
@@ -198,11 +188,8 @@ const LandingPage = () => {
                   value={senha}
                   onChange={(e) => setSenha(e.target.value)}
                   className="bg-white/5 border-white/15 text-white placeholder:text-white/45 focus:ring-[#78FFD2]/60 focus:border-[#78FFD2]/40"
-                  required
                 />
               </div>
-
-              {error && <p className="text-sm text-red-300">{error}</p>}
 
               <Button
                 id="btnEntrar"

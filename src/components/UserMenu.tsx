@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useUser } from "@/contexts/UserContext";
-import { User, Settings, LogOut, BarChart3, ListPlus, FileUp } from "lucide-react";
+import { User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -59,35 +59,6 @@ const UserMenu = ({ collapsed = false }: UserMenuProps) => {
             </p>
           </div>
         </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => navigate("/app/perfil")}
-          className="cursor-pointer"
-        >
-          <Settings className="mr-2 h-4 w-4" />
-          <span>Gerenciar cadastro</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => navigate("/app/perfil#relatorios")}
-          className="cursor-pointer"
-        >
-          <FileUp className="mr-2 h-4 w-4" />
-          <span>Inserir relatório</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => navigate("/app/powerbi")}
-          className="cursor-pointer"
-        >
-          <BarChart3 className="mr-2 h-4 w-4" />
-          <span>Inserir Power BI</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => navigate("/app/itens-sidebar")}
-          className="cursor-pointer"
-        >
-          <ListPlus className="mr-2 h-4 w-4" />
-          <span>Gerenciar itens da sidebar</span>
-        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
           <LogOut className="mr-2 h-4 w-4" />
