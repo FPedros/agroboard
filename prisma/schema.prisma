@@ -1,0 +1,46 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PowerBiPanel {
+  comercial
+  operacional
+  financeiro
+  principal
+}
+
+model Sector {
+  id        String        @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String        @unique
+  links     PowerBiLink[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@map("sectors")
+}
+
+model PowerBiLink {
+  id        String       @id @default(uuid()) @db.Uuid
+  sector    Sector       @relation(fields: [sectorId], references: [id], onDelete: Cascade)
+  sectorId  String       @db.Uuid
+  panel     PowerBiPanel
+  url       String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([sectorId, panel], map: "powerbi_link_sector_panel_key")
+  @@index([panel])
+  @@map("powerbi_links")
+}
