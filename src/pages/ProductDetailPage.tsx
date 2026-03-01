@@ -1,31 +1,26 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  AGROVALORA_CLIENTS,
   AGROTERRA_BASES,
   AGROTERRA_PAYMENTS,
   AVAILABLE_YEARS,
-  MONTH_LABELS,
+  fetchAgroValoraBasicReports,
   getMetricByMonth,
-  getMetricsByYear,
   getProductById,
+  type AgroValoraBasicPaymentStatus,
+  type AgroValoraBasicReportRecord,
+  type AgroValoraClientRecord,
+  type AgroValoraPlan,
   type AgroTerraBaseRecord,
+  type AgroTerraPaymentMethod,
+  type AgroTerraPaymentRecord,
 } from "@/lib/mockProducts";
-
-const currencyFormatter = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-  maximumFractionDigits: 0,
-});
+import { formatCurrencyBrl, formatCurrencyBrlDashboard } from "@/lib/utils";
 
 const percentFormatter = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
-});
-
-const usdFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
 });
 
 const usDateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -35,15 +30,25 @@ const usDateFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 const AGROTERRA_CLIENTS_STORAGE_KEY = "agroterra-clients";
+const AGROTERRA_PAYMENTS_STORAGE_KEY = "agroterra-payments";
+const AGROVALORA_CLIENTS_STORAGE_KEY = "agrovalora-clients";
 const DEFAULT_TOKEN_EXPIRATION = "31/12/2026";
 const BASE_HISTORY_START_YEAR = 2024;
 const BASE_UPDATE_MONTHS = [4, 10] as const;
+const AGROVALORA_PLAN_ORDER: AgroValoraPlan[] = ["Basic", "Plus", "Premium"];
+const ALL_FILTER_VALUE = "__all__";
 const LEGACY_BASE_HISTORY_FIELDS = [
   { date: "2024-04-01", field: "base01042024" },
   { date: "2024-10-01", field: "base01102024" },
   { date: "2025-04-01", field: "base01042025" },
   { date: "2025-10-01", field: "base01102025" },
 ] as const;
+
+const agroValoraBasicStatusClassMap: Record<AgroValoraBasicPaymentStatus, string> = {
+  Pago: "bg-emerald-100 text-emerald-800",
+  "Aguardando pagamento": "bg-amber-100 text-amber-800",
+  Cancelado: "bg-rose-100 text-rose-800",
+};
 
 type LegacyBaseHistoryField = (typeof LEGACY_BASE_HISTORY_FIELDS)[number]["field"];
 type LegacyAgroTerraClientRecord = Omit<AgroTerraBaseRecord, "baseHistory"> &
@@ -59,16 +64,90 @@ const yesNoLabel = (value: boolean) => (value ? "SIM" : "NAO");
 const toDate = (value: string) => new Date(`${value}T00:00:00`);
 
 const formatUsDate = (value: string) => usDateFormatter.format(toDate(value));
+const paymentMethodLabelMap: Record<string, string> = {
+  ACH: "ACH",
+  "Wire Transfer": "Transferencia bancaria",
+  "Corporate Card": "Cartao corporativo",
+  Check: "Cheque",
+};
+const formatPaymentMethodLabel = (value: string) => paymentMethodLabelMap[value] ?? value;
+const toIsoLocalDate = (value: Date) => {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+const toIsoDateFromBr = (value: string) => {
+  const [day, month, year] = value.split("/");
+  if (!day || !month || !year) return null;
+  return `${year}-${month}-${day}`;
+};
+const parseBrlAmountInput = (value: string) => {
+  const sanitized = value.trim().replace(/\./g, "").replace(",", ".");
+  if (!sanitized) return null;
+  const parsed = Number(sanitized);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.round(parsed * 100) / 100;
+};
+const parseBrDate = (value: string) => {
+  const isoDate = toIsoDateFromBr(value);
+  if (!isoDate) return null;
+  const parsedDate = new Date(`${isoDate}T00:00:00`);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
+const getTokenExpirationInfo = (tokenExpiration: string, referenceDate: Date) => {
+  const parsedDate = parseBrDate(tokenExpiration);
+  if (!parsedDate) {
+    return {
+      label: "Data invalida",
+      statusClass: "bg-slate-100 text-slate-700",
+      daysRemaining: null as number | null,
+    };
+  }
+
+  const daysRemaining = Math.ceil(
+    (parsedDate.getTime() - referenceDate.getTime()) / (1000 * 60 * 60 * 24),
+  );
+
+  if (daysRemaining < 0) {
+    return {
+      label: "Expirado",
+      statusClass: "bg-rose-100 text-rose-800",
+      daysRemaining,
+    };
+  }
+
+  if (daysRemaining <= 30) {
+    return {
+      label: "Vence em breve",
+      statusClass: "bg-amber-100 text-amber-800",
+      daysRemaining,
+    };
+  }
+
+  return {
+    label: "Ativo",
+    statusClass: "bg-emerald-100 text-emerald-800",
+    daysRemaining,
+  };
+};
+
 const formatBaseDate = (value: string) => {
   const [year, month, day] = value.split("-");
   if (!year || !month || !day) return value;
   return `${day}/${month}/${year}`;
 };
 
-const getBaseStatus = (client: AgroTerraBaseRecord, date: string) => client.baseHistory[date] ?? false;
-
 const getSortedBaseHistory = (client: AgroTerraBaseRecord) =>
   Object.entries(client.baseHistory).sort(([firstDate], [secondDate]) => firstDate.localeCompare(secondDate));
+
+const getVisibleBaseHistory = (client: AgroTerraBaseRecord) => {
+  const sortedHistory = getSortedBaseHistory(client);
+  const firstActiveIndex = sortedHistory.findIndex(([, status]) => status);
+  if (firstActiveIndex === -1) return [];
+  return sortedHistory.slice(firstActiveIndex);
+};
 
 const getEligibleUpdateDates = (referenceDate: Date) => {
   const normalizedToday = new Date(referenceDate);
@@ -127,6 +206,10 @@ type ClientFormState = {
   returnType: "Municipio" | "Polo";
   baseHistory: Record<string, BooleanFormValue>;
   tokenExpiration: string;
+  paymentDate: string;
+  paymentAmountBrl: string;
+  paymentMethod: AgroTerraPaymentMethod;
+  paymentTokenValidFrom: string;
 };
 
 const toBooleanFormValue = (value: boolean): BooleanFormValue => (value ? "true" : "false");
@@ -176,6 +259,61 @@ const toAgroTerraClientRecord = (value: unknown): AgroTerraBaseRecord | null => 
   };
 };
 
+const isAgroTerraPaymentRecord = (value: unknown): value is AgroTerraPaymentRecord => {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as AgroTerraPaymentRecord;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.clientId === "number" &&
+    typeof candidate.paidAt === "string" &&
+    typeof candidate.amountUsd === "number" &&
+    typeof candidate.paymentMethod === "string" &&
+    typeof candidate.paymentStatus === "string" &&
+    typeof candidate.tokenValidFrom === "string" &&
+    typeof candidate.tokenValidUntil === "string" &&
+    typeof candidate.paymentReference === "string"
+  );
+};
+
+const isAgroValoraPlan = (value: unknown): value is AgroValoraPlan =>
+  value === "Basic" || value === "Plus" || value === "Premium";
+
+const toAgroValoraClientRecord = (value: unknown): AgroValoraClientRecord | null => {
+  if (!value || typeof value !== "object") return null;
+
+  const candidate = value as AgroValoraClientRecord;
+  const hasBasicShape =
+    typeof candidate.id === "number" && typeof candidate.name === "string" && isAgroValoraPlan(candidate.plan);
+
+  if (!hasBasicShape) return null;
+
+  return {
+    id: candidate.id,
+    name: candidate.name,
+    plan: candidate.plan,
+  };
+};
+
+const loadAgroValoraClients = (): AgroValoraClientRecord[] => {
+  if (typeof window === "undefined") return AGROVALORA_CLIENTS;
+
+  try {
+    const stored = window.localStorage.getItem(AGROVALORA_CLIENTS_STORAGE_KEY);
+    if (!stored) return AGROVALORA_CLIENTS;
+
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return AGROVALORA_CLIENTS;
+
+    const validRecords = parsed
+      .map((record) => toAgroValoraClientRecord(record))
+      .filter((record): record is AgroValoraClientRecord => record !== null);
+    return validRecords.length > 0 ? validRecords : AGROVALORA_CLIENTS;
+  } catch {
+    return AGROVALORA_CLIENTS;
+  }
+};
+
 const getDefaultAgroTerraClients = (referenceDate: Date) =>
   AGROTERRA_BASES.map((client) => ({
     ...client,
@@ -206,23 +344,92 @@ const loadAgroTerraClients = (): AgroTerraBaseRecord[] => {
   }
 };
 
+const loadAgroTerraPayments = (): AgroTerraPaymentRecord[] => {
+  if (typeof window === "undefined") return AGROTERRA_PAYMENTS;
+
+  try {
+    const stored = window.localStorage.getItem(AGROTERRA_PAYMENTS_STORAGE_KEY);
+    if (!stored) return AGROTERRA_PAYMENTS;
+
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return AGROTERRA_PAYMENTS;
+
+    const validPayments = parsed.filter(isAgroTerraPaymentRecord);
+    return validPayments.length > 0 ? validPayments : AGROTERRA_PAYMENTS;
+  } catch {
+    return AGROTERRA_PAYMENTS;
+  }
+};
+
+const createAgroTerraPaymentRecord = ({
+  clientId,
+  paidAt,
+  amountBrl,
+  paymentMethod,
+  tokenValidFrom,
+  tokenValidUntil,
+  existingPayments,
+}: {
+  clientId: number;
+  paidAt: string;
+  amountBrl: number;
+  paymentMethod: AgroTerraPaymentMethod;
+  tokenValidFrom: string;
+  tokenValidUntil: string;
+  existingPayments: AgroTerraPaymentRecord[];
+}): AgroTerraPaymentRecord => {
+  const baseId = `AGT-${clientId}-${paidAt}`;
+  const idCount = existingPayments.filter((payment) => payment.id.startsWith(baseId)).length;
+  const id = idCount === 0 ? baseId : `${baseId}-${idCount + 1}`;
+
+  const year = paidAt.slice(0, 4);
+  const baseReference = `INV-AGT-${year}-${String(clientId).padStart(5, "0")}`;
+  const referenceCount = existingPayments.filter((payment) =>
+    payment.paymentReference.startsWith(baseReference),
+  ).length;
+  const paymentReference = `${baseReference}-${String(referenceCount + 1).padStart(2, "0")}`;
+
+  return {
+    id,
+    clientId,
+    paidAt,
+    amountUsd: amountBrl,
+    paymentMethod,
+    paymentStatus: "Settled",
+    tokenValidFrom,
+    tokenValidUntil,
+    paymentReference,
+  };
+};
+
 const getNextClientId = (clients: AgroTerraBaseRecord[]) =>
   clients.reduce((maxId, client) => Math.max(maxId, client.id), 0) + 1;
 
-const createNewClientForm = (nextId: number, referenceDate: Date): ClientFormState => ({
-  id: String(nextId),
-  client: "",
-  pricesByMunicipality: "false",
-  pricesByPoloAgro: "false",
-  returnType: "Municipio",
-  baseHistory: Object.fromEntries(
-    Object.entries(linkBaseHistoryDates({}, referenceDate)).map(([date, status]) => [
-      date,
-      toBooleanFormValue(status),
-    ]),
-  ),
-  tokenExpiration: DEFAULT_TOKEN_EXPIRATION,
-});
+const getNextAgroValoraClientId = (clients: AgroValoraClientRecord[]) =>
+  clients.reduce((maxId, client) => Math.max(maxId, client.id), 0) + 1;
+
+const createNewClientForm = (nextId: number, referenceDate: Date): ClientFormState => {
+  const defaultTokenValidFrom = formatBaseDate(toIsoLocalDate(referenceDate));
+
+  return {
+    id: String(nextId),
+    client: "",
+    pricesByMunicipality: "false",
+    pricesByPoloAgro: "false",
+    returnType: "Municipio",
+    baseHistory: Object.fromEntries(
+      Object.entries(linkBaseHistoryDates({}, referenceDate)).map(([date, status]) => [
+        date,
+        toBooleanFormValue(status),
+      ]),
+    ),
+    tokenExpiration: DEFAULT_TOKEN_EXPIRATION,
+    paymentDate: defaultTokenValidFrom,
+    paymentAmountBrl: "",
+    paymentMethod: "ACH",
+    paymentTokenValidFrom: defaultTokenValidFrom,
+  };
+};
 
 const mapClientToForm = (client: AgroTerraBaseRecord, referenceDate: Date): ClientFormState => ({
   id: String(client.id),
@@ -237,6 +444,25 @@ const mapClientToForm = (client: AgroTerraBaseRecord, referenceDate: Date): Clie
     ]),
   ),
   tokenExpiration: client.tokenExpiration,
+  paymentDate: formatBaseDate(toIsoLocalDate(referenceDate)),
+  paymentAmountBrl: "",
+  paymentMethod: "ACH",
+  paymentTokenValidFrom: formatBaseDate(toIsoLocalDate(referenceDate)),
+});
+
+type AgroValoraClientDraftState = Record<AgroValoraPlan, string>;
+type AgroValoraClientErrorState = Record<AgroValoraPlan, string>;
+
+const createEmptyAgroValoraDrafts = (): AgroValoraClientDraftState => ({
+  Basic: "",
+  Plus: "",
+  Premium: "",
+});
+
+const createEmptyAgroValoraErrors = (): AgroValoraClientErrorState => ({
+  Basic: "",
+  Plus: "",
+  Premium: "",
 });
 
 const ProductDetailPage = () => {
@@ -248,6 +474,21 @@ const ProductDetailPage = () => {
   const [selectedMonth, setSelectedMonth] = useState<number>(defaultMonth);
   const [expandedClientId, setExpandedClientId] = useState<number | null>(null);
   const [agroTerraClients, setAgroTerraClients] = useState<AgroTerraBaseRecord[]>(loadAgroTerraClients);
+  const [agroTerraPaymentsState, setAgroTerraPaymentsState] =
+    useState<AgroTerraPaymentRecord[]>(loadAgroTerraPayments);
+  const [agroValoraClients, setAgroValoraClients] = useState<AgroValoraClientRecord[]>(loadAgroValoraClients);
+  const [agroValoraBasicReports, setAgroValoraBasicReports] = useState<AgroValoraBasicReportRecord[]>([]);
+  const [agroValoraBasicLoading, setAgroValoraBasicLoading] = useState(false);
+  const [agroValoraBasicError, setAgroValoraBasicError] = useState("");
+  const [agroValoraBasicClientFilter, setAgroValoraBasicClientFilter] = useState(ALL_FILTER_VALUE);
+  const [agroValoraBasicRepresentativeFilter, setAgroValoraBasicRepresentativeFilter] =
+    useState(ALL_FILTER_VALUE);
+  const [agroValoraClientDrafts, setAgroValoraClientDrafts] = useState<AgroValoraClientDraftState>(
+    createEmptyAgroValoraDrafts,
+  );
+  const [agroValoraClientErrors, setAgroValoraClientErrors] = useState<AgroValoraClientErrorState>(
+    createEmptyAgroValoraErrors,
+  );
   const [clientFormMode, setClientFormMode] = useState<"create" | "edit" | null>(null);
   const [editingClientId, setEditingClientId] = useState<number | null>(null);
   const [clientFormError, setClientFormError] = useState("");
@@ -259,6 +500,43 @@ const ProductDetailPage = () => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(AGROTERRA_CLIENTS_STORAGE_KEY, JSON.stringify(agroTerraClients));
   }, [agroTerraClients]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(AGROTERRA_PAYMENTS_STORAGE_KEY, JSON.stringify(agroTerraPaymentsState));
+  }, [agroTerraPaymentsState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(AGROVALORA_CLIENTS_STORAGE_KEY, JSON.stringify(agroValoraClients));
+  }, [agroValoraClients]);
+
+  useEffect(() => {
+    if (product?.id !== "agrovalora") return;
+
+    let isMounted = true;
+    setAgroValoraBasicLoading(true);
+    setAgroValoraBasicError("");
+
+    fetchAgroValoraBasicReports()
+      .then((reports) => {
+        if (!isMounted) return;
+        setAgroValoraBasicReports(reports);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setAgroValoraBasicError("Nao foi possivel carregar os laudos Basic da API.");
+        setAgroValoraBasicReports([]);
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setAgroValoraBasicLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [product?.id]);
 
   if (!product) {
     return (
@@ -279,7 +557,6 @@ const ProductDetailPage = () => {
 
   const monthMetric = getMetricByMonth(product, selectedYear, selectedMonth);
   const previousYearMonthMetric = getMetricByMonth(product, selectedYear - 1, selectedMonth);
-  const yearMetrics = getMetricsByYear(product, selectedYear);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const eligibleUpdateDates = getEligibleUpdateDates(today);
@@ -289,31 +566,123 @@ const ProductDetailPage = () => {
   const secondaryGridDate = latestGridDates[1] ?? LEGACY_BASE_HISTORY_FIELDS[3].date;
   const sortedAgroTerraClients = [...agroTerraClients].sort((a, b) => a.id - b.id);
   const agroTerraClientMap = new Map(sortedAgroTerraClients.map((client) => [client.id, client]));
-  const agroTerraPayments = AGROTERRA_PAYMENTS.slice().sort((a, b) => b.paidAt.localeCompare(a.paidAt));
-  const agroTerraClientSummaries = sortedAgroTerraClients.map((client) => {
-    const clientPayments = agroTerraPayments.filter((payment) => payment.clientId === client.id);
-    const totalPaidUsd = clientPayments.reduce((sum, payment) => sum + payment.amountUsd, 0);
-    const lastPayment = clientPayments[0] ?? null;
+  const agroTerraPayments = [...agroTerraPaymentsState].sort((a, b) => b.paidAt.localeCompare(a.paidAt));
+  const activeAgroTerraPayments = agroTerraPayments.filter(
+    (payment) => toDate(payment.tokenValidUntil).getTime() >= today.getTime(),
+  );
+  const clientIdsWithActivePayment = new Set(activeAgroTerraPayments.map((payment) => payment.clientId));
+  const billingRows = [
+    ...activeAgroTerraPayments.map((payment) => {
+      const validUntilDate = toDate(payment.tokenValidUntil);
+      const daysRemaining = Math.ceil((validUntilDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-    return {
-      clientId: client.id,
-      clientName: client.client,
-      totalPaidUsd,
-      lastPaidAt: lastPayment?.paidAt ?? "",
-      currentTokenUntil: lastPayment?.tokenValidUntil ?? "",
-    };
+      return {
+        id: payment.id,
+        clientName: agroTerraClientMap.get(payment.clientId)?.client ?? "-",
+        paidAt: payment.paidAt,
+        amountBrl: payment.amountUsd,
+        paymentMethod: payment.paymentMethod,
+        tokenValidFrom: payment.tokenValidFrom,
+        tokenValidUntil: payment.tokenValidUntil,
+        tokenStatusClass: "bg-emerald-100 text-emerald-800",
+        tokenStatusLabel: `Ativo (${daysRemaining} dias)`,
+        sortDate: payment.tokenValidUntil,
+      };
+    }),
+    ...sortedAgroTerraClients.flatMap((client) => {
+      if (clientIdsWithActivePayment.has(client.id)) return [];
+      const tokenExpirationIso = toIsoDateFromBr(client.tokenExpiration);
+      if (!tokenExpirationIso) return [];
+
+      const tokenExpirationDate = toDate(tokenExpirationIso);
+      if (tokenExpirationDate.getTime() < today.getTime()) return [];
+
+      return [
+        {
+          id: `cliente-${client.id}-sem-pagamento`,
+          clientName: client.client,
+          paidAt: null,
+          amountBrl: null,
+          paymentMethod: null,
+          tokenValidFrom: null,
+          tokenValidUntil: tokenExpirationIso,
+          tokenStatusClass: "bg-emerald-100 text-emerald-800",
+          tokenStatusLabel: "Ativo (sem pagamento)",
+          sortDate: tokenExpirationIso,
+        },
+      ];
+    }),
+  ].sort((a, b) => b.sortDate.localeCompare(a.sortDate) || a.clientName.localeCompare(b.clientName));
+  const agroValoraClientsByPlan = Object.fromEntries(
+    AGROVALORA_PLAN_ORDER.map((plan) => [
+      plan,
+      agroValoraClients
+        .filter((client) => client.plan === plan)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    ]),
+  ) as Record<AgroValoraPlan, AgroValoraClientRecord[]>;
+  const agroValoraBasicClientOptions = [
+    ...new Set([
+      ...agroValoraClientsByPlan.Basic.map((client) => client.name),
+      ...agroValoraBasicReports
+        .map((report) => report.paidByClient)
+        .filter((client): client is string => Boolean(client)),
+    ]),
+  ].sort((a, b) => a.localeCompare(b));
+  const agroValoraBasicRepresentativeOptions = [...new Set(agroValoraBasicReports.map((report) => report.solicitante))]
+    .sort((a, b) => a.localeCompare(b));
+  const filteredAgroValoraBasicReports = agroValoraBasicReports.filter((report) => {
+    const matchesClient =
+      agroValoraBasicClientFilter === ALL_FILTER_VALUE || report.paidByClient === agroValoraBasicClientFilter;
+    const matchesRepresentative =
+      agroValoraBasicRepresentativeFilter === ALL_FILTER_VALUE ||
+      report.solicitante === agroValoraBasicRepresentativeFilter;
+    return matchesClient && matchesRepresentative;
   });
+  const agroValoraBasicPaidCount = filteredAgroValoraBasicReports.filter(
+    (report) => report.paymentStatus === "Pago",
+  ).length;
+  const agroValoraBasicPendingCount = filteredAgroValoraBasicReports.filter(
+    (report) => report.paymentStatus === "Aguardando pagamento",
+  ).length;
+  const agroValoraBasicCanceledCount = filteredAgroValoraBasicReports.filter(
+    (report) => report.paymentStatus === "Cancelado",
+  ).length;
 
-  const totalRevenueYear = yearMetrics.reduce((sum, metric) => sum + metric.revenue, 0);
-  const totalCostYear = yearMetrics.reduce((sum, metric) => sum + metric.cost, 0);
-  const averagePerformanceYear =
-    yearMetrics.length === 0
-      ? 0
-      : Number(
-          (
-            yearMetrics.reduce((sum, metric) => sum + metric.performance, 0) / yearMetrics.length
-          ).toFixed(1),
-        );
+  const updateAgroValoraClientDraft = (plan: AgroValoraPlan, value: string) => {
+    setAgroValoraClientDrafts((current) => ({ ...current, [plan]: value }));
+    setAgroValoraClientErrors((current) => ({ ...current, [plan]: "" }));
+  };
+
+  const addAgroValoraClient = (plan: AgroValoraPlan) => {
+    const clientName = agroValoraClientDrafts[plan].trim();
+    if (!clientName) {
+      setAgroValoraClientErrors((current) => ({ ...current, [plan]: "Informe o nome do cliente." }));
+      return;
+    }
+
+    const duplicateClientInPlan = agroValoraClients.some(
+      (client) => client.plan === plan && client.name.toLowerCase() === clientName.toLowerCase(),
+    );
+    if (duplicateClientInPlan) {
+      setAgroValoraClientErrors((current) => ({
+        ...current,
+        [plan]: "Este cliente ja esta cadastrado nesta categoria.",
+      }));
+      return;
+    }
+
+    setAgroValoraClients((current) => [
+      ...current,
+      {
+        id: getNextAgroValoraClientId(current),
+        name: clientName,
+        plan,
+      },
+    ]);
+    setAgroValoraClientDrafts((current) => ({ ...current, [plan]: "" }));
+    setAgroValoraClientErrors((current) => ({ ...current, [plan]: "" }));
+  };
 
   const updateClientForm = <K extends keyof ClientFormState>(field: K, value: ClientFormState[K]) => {
     setClientForm((current) => ({ ...current, [field]: value }));
@@ -379,6 +748,43 @@ const ProductDetailPage = () => {
       return;
     }
 
+    let newPaymentRecord: AgroTerraPaymentRecord | null = null;
+    if (clientFormMode === "create") {
+      if (!tokenDatePattern.test(clientForm.paymentDate.trim())) {
+        setClientFormError("Data de pagamento invalida. Use DD/MM/AAAA.");
+        return;
+      }
+
+      if (!tokenDatePattern.test(clientForm.paymentTokenValidFrom.trim())) {
+        setClientFormError("Token valido de invalido. Use DD/MM/AAAA.");
+        return;
+      }
+
+      const parsedPaymentAmount = parseBrlAmountInput(clientForm.paymentAmountBrl);
+      if (parsedPaymentAmount === null) {
+        setClientFormError("Valor (BRL) invalido.");
+        return;
+      }
+
+      const paidAtIso = toIsoDateFromBr(clientForm.paymentDate.trim());
+      const tokenValidFromIso = toIsoDateFromBr(clientForm.paymentTokenValidFrom.trim());
+      const tokenValidUntilIso = toIsoDateFromBr(clientForm.tokenExpiration.trim());
+      if (!paidAtIso || !tokenValidFromIso || !tokenValidUntilIso) {
+        setClientFormError("Datas de pagamento/token invalidas. Use DD/MM/AAAA.");
+        return;
+      }
+
+      newPaymentRecord = createAgroTerraPaymentRecord({
+        clientId: targetClientId,
+        paidAt: paidAtIso,
+        amountBrl: parsedPaymentAmount,
+        paymentMethod: clientForm.paymentMethod,
+        tokenValidFrom: tokenValidFromIso,
+        tokenValidUntil: tokenValidUntilIso,
+        existingPayments: agroTerraPaymentsState,
+      });
+    }
+
     const parsedFormBaseHistory = Object.fromEntries(
       Object.entries(clientForm.baseHistory).map(([date, status]) => [date, parseBooleanFormValue(status)]),
     );
@@ -405,59 +811,98 @@ const ProductDetailPage = () => {
       return current.map((client) => (client.id === targetClientId ? updatedClient : client));
     });
 
+    if (newPaymentRecord) {
+      setAgroTerraPaymentsState((current) => [newPaymentRecord, ...current]);
+    }
+
     cancelClientForm();
   };
 
   return (
     <section className="w-full space-y-6">
-      <header className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Produto</p>
-            <h1 className="mt-1 text-3xl font-semibold text-foreground">{product.name}</h1>
-            <p className="mt-3 text-sm text-muted-foreground">Modelo de venda: {product.salesModel}</p>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Faturamento do mes</p>
+          <p className="mt-2 text-2xl font-semibold text-foreground">
+            {formatCurrencyBrlDashboard(monthMetric?.revenue ?? 0)}
+          </p>
+        </article>
+
+        <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Custo do mes</p>
+          <p className="mt-2 text-2xl font-semibold text-foreground">
+            {formatCurrencyBrlDashboard(monthMetric?.cost ?? 0)}
+          </p>
+        </article>
+
+        <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Performance do mes</p>
+          <p className="mt-2 text-2xl font-semibold text-foreground">
+            {percentFormatter.format(monthMetric?.performance ?? 0)}%
+          </p>
+          {previousYearMonthMetric && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Ano anterior ({selectedYear - 1}): {percentFormatter.format(previousYearMonthMetric.performance)}%
+            </p>
+          )}
+        </article>
+      </div>
+
+      {product.id === "agroterra" && (
+        <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-foreground">Faturamento e Controle de Token</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Registros anuais por cliente com valor pago, data de pagamento, metodo e validade do token.
+          </p>
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[1120px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-border text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Cliente</th>
+                  <th className="px-3 py-2 font-medium">Data de pagamento</th>
+                  <th className="px-3 py-2 font-medium">Valor (BRL)</th>
+                  <th className="px-3 py-2 font-medium">Forma de pagamento</th>
+                  <th className="px-3 py-2 font-medium">Token valido de</th>
+                  <th className="px-3 py-2 font-medium">Token valido ate</th>
+                  <th className="px-3 py-2 font-medium">Status do token</th>
+                </tr>
+              </thead>
+              <tbody>
+                {billingRows.map((row) => {
+                  return (
+                    <tr key={row.id} className="border-b border-border/60">
+                      <td className="px-3 py-2 font-medium text-foreground">{row.clientName}</td>
+                      <td className="px-3 py-2">{row.paidAt ? formatUsDate(row.paidAt) : "-"}</td>
+                      <td className="px-3 py-2">
+                        {row.amountBrl !== null ? formatCurrencyBrl(row.amountBrl) : "-"}
+                      </td>
+                      <td className="px-3 py-2">
+                        {row.paymentMethod ? formatPaymentMethodLabel(row.paymentMethod) : "-"}
+                      </td>
+                      <td className="px-3 py-2">{row.tokenValidFrom ? formatUsDate(row.tokenValidFrom) : "-"}</td>
+                      <td className="px-3 py-2">{formatUsDate(row.tokenValidUntil)}</td>
+                      <td className="px-3 py-2">
+                        <span className={`rounded px-2 py-1 text-xs font-semibold ${row.tokenStatusClass}`}>
+                          {row.tokenStatusLabel}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-          <div className="flex gap-3">
-            <label className="flex flex-col gap-2 text-xs text-muted-foreground">
-              Ano
-              <select
-                value={selectedYear}
-                onChange={(event) => setSelectedYear(Number(event.target.value))}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
-              >
-                {AVAILABLE_YEARS.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-2 text-xs text-muted-foreground">
-              Mes
-              <select
-                value={selectedMonth}
-                onChange={(event) => setSelectedMonth(Number(event.target.value))}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
-              >
-                {MONTH_LABELS.map((label, index) => (
-                  <option key={label} value={index + 1}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </div>
-      </header>
+        </article>
+      )}
 
       {product.id === "agroterra" && (
         <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-foreground">Bases AgroTerra (mock da planilha)</h2>
+              <h2 className="text-lg font-semibold text-foreground">Clientes AgroTerra</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Ultimas duas atualizacoes de base no grid principal ({formatBaseDate(primaryGridDate)} e{" "}
-                {formatBaseDate(secondaryGridDate)}).
+                O que cada cliente assinou e historico de ativacoes da base.
               </p>
             </div>
             <button
@@ -521,7 +966,7 @@ const ProductDetailPage = () => {
                 </label>
 
                 <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-                  Expiracao do token
+                  Token valido ate
                   <input
                     type="text"
                     value={clientForm.tokenExpiration}
@@ -530,6 +975,59 @@ const ProductDetailPage = () => {
                     className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
                   />
                 </label>
+
+                {clientFormMode === "create" && (
+                  <>
+                    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      Data de pagamento
+                      <input
+                        type="text"
+                        value={clientForm.paymentDate}
+                        onChange={(event) => updateClientForm("paymentDate", event.target.value)}
+                        placeholder="DD/MM/AAAA"
+                        className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                      />
+                    </label>
+
+                    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      Valor (BRL)
+                      <input
+                        type="text"
+                        value={clientForm.paymentAmountBrl}
+                        onChange={(event) => updateClientForm("paymentAmountBrl", event.target.value)}
+                        placeholder="Ex.: 104000 ou 104.000,00"
+                        className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                      />
+                    </label>
+
+                    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      Forma de pagamento
+                      <select
+                        value={clientForm.paymentMethod}
+                        onChange={(event) =>
+                          updateClientForm("paymentMethod", event.target.value as AgroTerraPaymentMethod)
+                        }
+                        className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                      >
+                        <option value="ACH">ACH</option>
+                        <option value="Wire Transfer">Transferencia bancaria</option>
+                        <option value="Corporate Card">Cartao corporativo</option>
+                        <option value="Check">Cheque</option>
+                      </select>
+                    </label>
+
+                    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      Token valido de
+                      <input
+                        type="text"
+                        value={clientForm.paymentTokenValidFrom}
+                        onChange={(event) => updateClientForm("paymentTokenValidFrom", event.target.value)}
+                        placeholder="DD/MM/AAAA"
+                        className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                      />
+                    </label>
+                  </>
+                )}
 
                 <label className="flex flex-col gap-1 text-xs text-muted-foreground">
                   Precos por Municipio
@@ -607,76 +1105,6 @@ const ProductDetailPage = () => {
             </form>
           )}
 
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-muted-foreground">
-                  <th className="px-3 py-2 font-medium">ID</th>
-                  <th className="px-3 py-2 font-medium">Cliente</th>
-                  <th className="px-3 py-2 font-medium">Precos por Municipio</th>
-                  <th className="px-3 py-2 font-medium">Precos por Polo Agro</th>
-                  <th className="px-3 py-2 font-medium">Retorno</th>
-                  <th className="px-3 py-2 font-medium">{formatBaseDate(primaryGridDate)}</th>
-                  <th className="px-3 py-2 font-medium">{formatBaseDate(secondaryGridDate)}</th>
-                  <th className="px-3 py-2 font-medium">Expiracao do token</th>
-                  <th className="px-3 py-2 font-medium">Acoes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedAgroTerraClients.map((row) => (
-                  <tr key={row.id} className="border-b border-border/60">
-                    <td className="px-3 py-2">{row.id}</td>
-                    <td className="px-3 py-2 font-medium text-foreground">{row.client}</td>
-                    <td className="px-3 py-2">
-                      <span className={`rounded px-2 py-1 text-xs font-semibold ${yesNoClass(row.pricesByMunicipality)}`}>
-                        {yesNoLabel(row.pricesByMunicipality)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className={`rounded px-2 py-1 text-xs font-semibold ${yesNoClass(row.pricesByPoloAgro)}`}>
-                        {yesNoLabel(row.pricesByPoloAgro)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">{row.returnType}</td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`rounded px-2 py-1 text-xs font-semibold ${yesNoClass(getBaseStatus(row, primaryGridDate))}`}
-                      >
-                        {yesNoLabel(getBaseStatus(row, primaryGridDate))}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`rounded px-2 py-1 text-xs font-semibold ${yesNoClass(getBaseStatus(row, secondaryGridDate))}`}
-                      >
-                        {yesNoLabel(getBaseStatus(row, secondaryGridDate))}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">{row.tokenExpiration}</td>
-                    <td className="px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => startEditClient(row)}
-                        className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40"
-                      >
-                        Editar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
-      )}
-
-      {product.id === "agroterra" && (
-        <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-foreground">Clientes AgroTerra</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            O que cada cliente assinou e historico de ativacoes da base.
-          </p>
-
           <div className="mt-4 space-y-3">
             {sortedAgroTerraClients.map((client) => {
               const isOpen = expandedClientId === client.id;
@@ -684,24 +1112,51 @@ const ProductDetailPage = () => {
                 .filter((payment) => payment.clientId === client.id)
                 .sort((a, b) => b.paidAt.localeCompare(a.paidAt));
               const latestPayment = clientPayments[0] ?? null;
+              const visibleBaseHistory = getVisibleBaseHistory(client);
+              const tokenInfo = getTokenExpirationInfo(client.tokenExpiration, today);
 
               return (
                 <div key={client.id} className="rounded-xl border border-border">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedClientId(isOpen ? null : client.id)}
-                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/20"
-                  >
-                    <div>
+                  <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-start md:justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedClientId(isOpen ? null : client.id)}
+                      className="min-w-0 flex-1 text-left"
+                    >
                       <p className="text-sm font-semibold text-foreground">{client.client}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                        <span className="rounded bg-muted px-2 py-0.5 text-muted-foreground">
+                          Token ate {client.tokenExpiration}
+                        </span>
+                        <span className={`rounded px-2 py-0.5 font-semibold ${tokenInfo.statusClass}`}>
+                          {tokenInfo.label}
+                        </span>
+                        {tokenInfo.daysRemaining !== null && tokenInfo.daysRemaining >= 0 && (
+                          <span className="text-muted-foreground">{tokenInfo.daysRemaining} dias</span>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         ID {client.id} · Retorno: {client.returnType}
                       </p>
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => startEditClient(client)}
+                        className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedClientId(isOpen ? null : client.id)}
+                        className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40"
+                      >
+                        {isOpen ? "Ocultar" : "Ver cliente"}
+                      </button>
                     </div>
-                    <span className="rounded border border-border px-2 py-1 text-xs text-muted-foreground">
-                      {isOpen ? "Ocultar" : "Ver cliente"}
-                    </span>
-                  </button>
+                  </div>
 
                   {isOpen && (
                     <div className="border-t border-border px-4 py-4">
@@ -734,22 +1189,27 @@ const ProductDetailPage = () => {
                           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             Historico de base
                           </p>
-                          <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                            {getSortedBaseHistory(client).map(([date, status]) => (
-                              <div key={date} className="flex items-center gap-2 rounded-md bg-muted/30 px-2 py-1">
-                                <span>{formatBaseDate(date)}</span>
-                                <span className={`rounded px-2 py-0.5 font-semibold ${yesNoClass(status)}`}>
-                                  {yesNoLabel(status)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
+                          {visibleBaseHistory.length > 0 ? (
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                              {visibleBaseHistory.map(([date, status]) => (
+                                <div key={date} className="flex items-center gap-2 rounded-md bg-muted/30 px-2 py-1">
+                                  <span>{formatBaseDate(date)}</span>
+                                  <span className={`rounded px-2 py-0.5 font-semibold ${yesNoClass(status)}`}>
+                                    {yesNoLabel(status)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-xs text-muted-foreground">Sem base recebida (SIM) ate o momento.</p>
+                          )}
                         </div>
                       </div>
 
                       {latestPayment && (
                         <div className="mt-4 rounded-lg bg-muted/20 p-3 text-xs text-muted-foreground">
-                          Ultimo pagamento: {formatUsDate(latestPayment.paidAt)} · Metodo: {latestPayment.paymentMethod}
+                          Ultimo pagamento: {formatUsDate(latestPayment.paidAt)} · Metodo:{" "}
+                          {formatPaymentMethodLabel(latestPayment.paymentMethod)}
                           {" · "}Token ativo ate: {formatUsDate(latestPayment.tokenValidUntil)}
                         </div>
                       )}
@@ -762,156 +1222,206 @@ const ProductDetailPage = () => {
         </article>
       )}
 
-      {product.id === "agroterra" && (
+      {product.id === "agrovalora" && (
         <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-foreground">Billing & Token Ledger</h2>
+          <h2 className="text-lg font-semibold text-foreground">Basic: Laudos por representante</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Registros anuais por cliente com valor pago, data de pagamento, metodo e validade do token.
+            Dados recebidos via API do Agrovalora
           </p>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-            {agroTerraClientSummaries.map((summary) => (
-              <div key={summary.clientId} className="rounded-xl border border-border bg-muted/20 p-3">
-                <p className="text-sm font-semibold text-foreground">{summary.clientName}</p>
-                <p className="mt-1 text-xs text-muted-foreground">Total paid</p>
-                <p className="text-sm font-medium text-foreground">{usdFormatter.format(summary.totalPaidUsd)}</p>
-                {summary.lastPaidAt && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Last payment: {formatUsDate(summary.lastPaidAt)}
-                  </p>
-                )}
-                {summary.currentTokenUntil && (
-                  <p className="text-xs text-muted-foreground">
-                    Active token until: {formatUsDate(summary.currentTokenUntil)}
-                  </p>
-                )}
-              </div>
-            ))}
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+            <article className="rounded-xl border border-border bg-muted/20 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Total de laudos</p>
+              <p className="mt-1 text-2xl font-semibold text-foreground">{filteredAgroValoraBasicReports.length}</p>
+            </article>
+            <article className="rounded-xl border border-border bg-muted/20 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Pagos</p>
+              <p className="mt-1 text-2xl font-semibold text-emerald-700">{agroValoraBasicPaidCount}</p>
+            </article>
+            <article className="rounded-xl border border-border bg-muted/20 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Aguardando pagamento</p>
+              <p className="mt-1 text-2xl font-semibold text-amber-700">{agroValoraBasicPendingCount}</p>
+            </article>
+            <article className="rounded-xl border border-border bg-muted/20 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Cancelados</p>
+              <p className="mt-1 text-2xl font-semibold text-rose-700">{agroValoraBasicCanceledCount}</p>
+            </article>
           </div>
 
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[1120px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-muted-foreground">
-                  <th className="px-3 py-2 font-medium">Cliente</th>
-                  <th className="px-3 py-2 font-medium">Payment Ref</th>
-                  <th className="px-3 py-2 font-medium">Paid date</th>
-                  <th className="px-3 py-2 font-medium">Amount (USD)</th>
-                  <th className="px-3 py-2 font-medium">Payment method</th>
-                  <th className="px-3 py-2 font-medium">Token valid from</th>
-                  <th className="px-3 py-2 font-medium">Token valid until</th>
-                  <th className="px-3 py-2 font-medium">Token status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {agroTerraPayments.map((payment) => {
-                  const clientName = agroTerraClientMap.get(payment.clientId)?.client ?? "-";
-                  const validUntilDate = toDate(payment.tokenValidUntil);
-                  const daysRemaining = Math.ceil(
-                    (validUntilDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-                  );
-                  const isTokenActive = daysRemaining >= 0;
-                  const tokenStatusClass = isTokenActive
-                    ? "bg-emerald-100 text-emerald-800"
-                    : "bg-rose-100 text-rose-800";
-                  const tokenStatusLabel = isTokenActive ? `Active (${daysRemaining}d)` : "Expired";
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+              Cliente pagador
+              <select
+                value={agroValoraBasicClientFilter}
+                onChange={(event) => setAgroValoraBasicClientFilter(event.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+              >
+                <option value={ALL_FILTER_VALUE}>Todos</option>
+                {agroValoraBasicClientOptions.map((client) => (
+                  <option key={client} value={client}>
+                    {client}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-                  return (
-                    <tr key={payment.id} className="border-b border-border/60">
-                      <td className="px-3 py-2 font-medium text-foreground">{clientName}</td>
-                      <td className="px-3 py-2">{payment.paymentReference}</td>
-                      <td className="px-3 py-2">{formatUsDate(payment.paidAt)}</td>
-                      <td className="px-3 py-2">{usdFormatter.format(payment.amountUsd)}</td>
-                      <td className="px-3 py-2">{payment.paymentMethod}</td>
-                      <td className="px-3 py-2">{formatUsDate(payment.tokenValidFrom)}</td>
-                      <td className="px-3 py-2">{formatUsDate(payment.tokenValidUntil)}</td>
-                      <td className="px-3 py-2">
-                        <span className={`rounded px-2 py-1 text-xs font-semibold ${tokenStatusClass}`}>
-                          {tokenStatusLabel}
-                        </span>
-                      </td>
+            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+              Representante
+              <select
+                value={agroValoraBasicRepresentativeFilter}
+                onChange={(event) => setAgroValoraBasicRepresentativeFilter(event.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+              >
+                <option value={ALL_FILTER_VALUE}>Todos</option>
+                {agroValoraBasicRepresentativeOptions.map((representative) => (
+                  <option key={representative} value={representative}>
+                    {representative}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {agroValoraBasicLoading ? (
+            <p className="mt-4 text-sm text-muted-foreground">Carregando laudos Basic da API...</p>
+          ) : agroValoraBasicError ? (
+            <p className="mt-4 text-sm text-red-600">{agroValoraBasicError}</p>
+          ) : (
+            <>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[1320px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-muted-foreground">
+                      <th className="px-3 py-2 font-medium">Registro</th>
+                      <th className="px-3 py-2 font-medium">Solicitante</th>
+                      <th className="px-3 py-2 font-medium">Cliente</th>
+                      <th className="px-3 py-2 font-medium">CPF/CNPJ</th>
+                      <th className="px-3 py-2 font-medium">Municipio</th>
+                      <th className="px-3 py-2 font-medium">Status pagamento</th>
+                      <th className="px-3 py-2 font-medium">Data pagamento</th>
+                      <th className="px-3 py-2 font-medium">Metodo pagamento</th>
+                      <th className="px-3 py-2 font-medium">Prazo</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {filteredAgroValoraBasicReports.map((report) => {
+                      const prazoDotClass = report.paymentStatus === "Cancelado" ? "bg-rose-500" : "bg-emerald-500";
+
+                      return (
+                        <tr key={report.registro} className="border-b border-border/60">
+                          <td className="px-3 py-2">{report.registro}</td>
+                          <td className="px-3 py-2">{report.solicitante}</td>
+                          <td className="px-3 py-2 font-medium text-foreground">{report.cliente}</td>
+                          <td className="px-3 py-2">{report.cpfCnpj}</td>
+                          <td className="px-3 py-2">{report.municipio}</td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={`rounded px-2 py-1 text-xs font-semibold ${
+                                agroValoraBasicStatusClassMap[report.paymentStatus]
+                              }`}
+                            >
+                              {report.paymentStatus}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            {report.paymentDate ? formatBaseDate(report.paymentDate) : "-"}
+                          </td>
+                          <td className="px-3 py-2">{report.paymentMethod ?? "-"}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-block h-2.5 w-2.5 rounded-full ${prazoDotClass}`} />
+                              <span>{report.prazoDiasRestantes} dias restantes</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {filteredAgroValoraBasicReports.length === 0 && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Nenhum laudo encontrado com os filtros selecionados.
+                </p>
+              )}
+            </>
+          )}
+        </article>
+      )}
+
+      {product.id === "agrovalora" && (
+        <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-foreground">Clientes por categoria</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Gestao separada entre os planos Basic, Plus e Premium.
+          </p>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+            {AGROVALORA_PLAN_ORDER.map((plan) => {
+              const clients = agroValoraClientsByPlan[plan];
+              return (
+                <section key={plan} className="rounded-xl border border-border bg-muted/20 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-foreground">{plan}</h3>
+                    <span className="rounded-md bg-background px-2 py-0.5 text-xs text-muted-foreground">
+                      {clients.length} cliente(s)
+                    </span>
+                  </div>
+
+                  <div className="mt-3">
+                    {clients.length > 0 ? (
+                      <ul className="space-y-2 text-sm">
+                        {clients.map((client) => (
+                          <li
+                            key={client.id}
+                            className="rounded-md border border-border/70 bg-background px-3 py-2 text-foreground"
+                          >
+                            {client.name}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Nenhum cliente cadastrado.</p>
+                    )}
+                  </div>
+
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      addAgroValoraClient(plan);
+                    }}
+                    className="mt-4 space-y-2"
+                  >
+                    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      Novo cliente
+                      <input
+                        type="text"
+                        value={agroValoraClientDrafts[plan]}
+                        onChange={(event) => updateAgroValoraClientDraft(plan, event.target.value)}
+                        placeholder="Ex.: Banco do Brasil"
+                        className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                      />
+                    </label>
+
+                    {agroValoraClientErrors[plan] && (
+                      <p className="text-xs text-red-600">{agroValoraClientErrors[plan]}</p>
+                    )}
+
+                    <button
+                      type="submit"
+                      className="h-10 w-full rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                    >
+                      Cadastrar cliente
+                    </button>
+                  </form>
+                </section>
+              );
+            })}
           </div>
         </article>
       )}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Faturamento do mes</p>
-          <p className="mt-2 text-2xl font-semibold text-foreground">
-            {currencyFormatter.format(monthMetric?.revenue ?? 0)}
-          </p>
-        </article>
-
-        <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Custo do mes</p>
-          <p className="mt-2 text-2xl font-semibold text-foreground">
-            {currencyFormatter.format(monthMetric?.cost ?? 0)}
-          </p>
-        </article>
-
-        <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Performance do mes</p>
-          <p className="mt-2 text-2xl font-semibold text-foreground">
-            {percentFormatter.format(monthMetric?.performance ?? 0)}%
-          </p>
-          {previousYearMonthMetric && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Ano anterior ({selectedYear - 1}): {percentFormatter.format(previousYearMonthMetric.performance)}%
-            </p>
-          )}
-        </article>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <article className="rounded-2xl border border-border bg-card p-5 shadow-sm lg:col-span-2">
-          <h2 className="text-lg font-semibold text-foreground">Historico mensal de {selectedYear}</h2>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-muted-foreground">
-                  <th className="px-3 py-2 font-medium">Mes</th>
-                  <th className="px-3 py-2 font-medium">Faturamento</th>
-                  <th className="px-3 py-2 font-medium">Custo</th>
-                  <th className="px-3 py-2 font-medium">Performance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {yearMetrics.map((metric) => (
-                  <tr key={`${metric.year}-${metric.month}`} className="border-b border-border/60">
-                    <td className="px-3 py-2">{MONTH_LABELS[metric.month - 1]}</td>
-                    <td className="px-3 py-2">{currencyFormatter.format(metric.revenue)}</td>
-                    <td className="px-3 py-2">{currencyFormatter.format(metric.cost)}</td>
-                    <td className="px-3 py-2">{percentFormatter.format(metric.performance)}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-foreground">Regras comerciais</h2>
-          <ul className="mt-3 list-disc space-y-2 pl-4 text-sm text-muted-foreground">
-            {product.salesRules.map((rule) => (
-              <li key={rule}>{rule}</li>
-            ))}
-          </ul>
-
-          <div className="mt-5 space-y-2 rounded-xl bg-muted/40 p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Resumo anual {selectedYear}</p>
-            <p className="text-sm text-foreground">Faturamento: {currencyFormatter.format(totalRevenueYear)}</p>
-            <p className="text-sm text-foreground">Custo: {currencyFormatter.format(totalCostYear)}</p>
-            <p className="text-sm text-foreground">
-              Performance media: {percentFormatter.format(averagePerformanceYear)}%
-            </p>
-          </div>
-        </article>
-      </div>
     </section>
   );
 };

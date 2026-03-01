@@ -48,6 +48,32 @@ export type AgroTerraPaymentRecord = {
   paymentReference: string;
 };
 
+export type AgroValoraPlan = "Basic" | "Plus" | "Premium";
+
+export type AgroValoraClientRecord = {
+  id: number;
+  name: string;
+  plan: AgroValoraPlan;
+};
+
+export type AgroValoraBasicPaymentStatus = "Pago" | "Aguardando pagamento" | "Cancelado";
+
+export type AgroValoraBasicPaymentMethod = "PIX" | "Boleto" | "Cartao" | "Transferencia";
+
+export type AgroValoraBasicReportRecord = {
+  registro: string;
+  pacote: string;
+  solicitante: string;
+  cliente: string;
+  cpfCnpj: string;
+  municipio: string;
+  prazoDiasRestantes: number;
+  paymentStatus: AgroValoraBasicPaymentStatus;
+  paymentDate: string | null;
+  paymentMethod: AgroValoraBasicPaymentMethod | null;
+  paidByClient: string | null;
+};
+
 type ProductDefinition = {
   id: ProductId;
   name: string;
@@ -332,6 +358,167 @@ export const AGROTERRA_PAYMENTS: AgroTerraPaymentRecord[] = [
     paymentReference: "INV-AGT-2025-00046",
   },
 ];
+
+export const AGROVALORA_CLIENTS: AgroValoraClientRecord[] = [
+  {
+    id: 1,
+    name: "Santander",
+    plan: "Basic",
+  },
+  {
+    id: 2,
+    name: "Bradesco",
+    plan: "Basic",
+  },
+  {
+    id: 3,
+    name: "Bradesco",
+    plan: "Plus",
+  },
+  {
+    id: 4,
+    name: "Santander",
+    plan: "Premium",
+  },
+];
+
+export const AGROVALORA_BASIC_REPORTS: AgroValoraBasicReportRecord[] = [
+  {
+    registro: "1.3.1.20260227.001",
+    pacote: "Laudo Basic",
+    solicitante: "Santander Comercial83",
+    cliente: "Nasciagro Agronegocios Ltda",
+    cpfCnpj: "40.905.885/0001-92",
+    municipio: "N/A",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Aguardando pagamento",
+    paymentDate: null,
+    paymentMethod: null,
+    paidByClient: "Santander",
+  },
+  {
+    registro: "1.3.1.20260227.002",
+    pacote: "Laudo Basic",
+    solicitante: "Apoio Rural Planejamento Agropecuario Ltda",
+    cliente: "Antonio Cesar Carretero",
+    cpfCnpj: "295.120.128-12",
+    municipio: "N/A",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2026-02-27",
+    paymentMethod: "PIX",
+    paidByClient: "Bradesco",
+  },
+  {
+    registro: "1.3.1.20260227.003",
+    pacote: "Laudo Basic",
+    solicitante: "Romagnoli Projetos Ltda Me",
+    cliente: "Lucas Revoredo Penteado",
+    cpfCnpj: "302.708.118-77",
+    municipio: "N/A",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Aguardando pagamento",
+    paymentDate: null,
+    paymentMethod: null,
+    paidByClient: "Bradesco",
+  },
+  {
+    registro: "1.3.1.20260227.004",
+    pacote: "Laudo Basic",
+    solicitante: "Gh Sustentavel Consultorias Agricolas Ltda",
+    cliente: "Carlos Alberto Ferreira Freire",
+    cpfCnpj: "432.044.306-34",
+    municipio: "N/A",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Aguardando pagamento",
+    paymentDate: null,
+    paymentMethod: null,
+    paidByClient: "Bradesco",
+  },
+  {
+    registro: "1.3.1.20260227.005",
+    pacote: "Laudo Basic",
+    solicitante: "Jardel Cordovil Da Silva",
+    cliente: "Kassandra Lamare Vargas Leonel Soares Ferreira",
+    cpfCnpj: "278.414.216-72",
+    municipio: "N/A",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Cancelado",
+    paymentDate: null,
+    paymentMethod: null,
+    paidByClient: "Bradesco",
+  },
+  {
+    registro: "1.3.1.20260227.006",
+    pacote: "Laudo Basic",
+    solicitante: "J V Pantaleo Agronomia Ltda",
+    cliente: "Fabiano Antonio Da Silva",
+    cpfCnpj: "133.357.508-45",
+    municipio: "N/A",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2026-02-27",
+    paymentMethod: "Transferencia",
+    paidByClient: "Bradesco",
+  },
+  {
+    registro: "1.3.1.20260227.007",
+    pacote: "Laudo Basic",
+    solicitante: "Mv Agricultura Ltda",
+    cliente: "Paulo Cesar Paschoim Leite",
+    cpfCnpj: "020.330.108-05",
+    municipio: "N/A",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2026-02-27",
+    paymentMethod: "Boleto",
+    paidByClient: "Bradesco",
+  },
+  {
+    registro: "1.3.1.20260227.008",
+    pacote: "Laudo Basic",
+    solicitante: "Apoio Rural Planejamento Agropecuario Ltda",
+    cliente: "Marcos Leonardo Souza Da Costa Moura",
+    cpfCnpj: "249.231.251-87",
+    municipio: "N/A",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Aguardando pagamento",
+    paymentDate: null,
+    paymentMethod: null,
+    paidByClient: "Bradesco",
+  },
+  {
+    registro: "1.3.1.20260227.009",
+    pacote: "Laudo Basic",
+    solicitante: "J V Pantaleo Agronomia Ltda",
+    cliente: "Jean Viais Pantaleao Viais Pantaleao",
+    cpfCnpj: "043.888.808-17",
+    municipio: "N/A",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2026-02-27",
+    paymentMethod: "Cartao",
+    paidByClient: "Bradesco",
+  },
+  {
+    registro: "1.3.1.20260227.010",
+    pacote: "Laudo Basic",
+    solicitante: "Dc Consultoria E Treinamento Ltda",
+    cliente: "Pedro Alcantara Monteiro Neto",
+    cpfCnpj: "289.121.790-04",
+    municipio: "N/A",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Cancelado",
+    paymentDate: null,
+    paymentMethod: null,
+    paidByClient: "Bradesco",
+  },
+];
+
+export const fetchAgroValoraBasicReports = async (): Promise<AgroValoraBasicReportRecord[]> => {
+  await new Promise((resolve) => setTimeout(resolve, 220));
+  return AGROVALORA_BASIC_REPORTS.map((report) => ({ ...report }));
+};
 
 export const PRODUCT_IDS = PRODUCTS.map((product) => product.id);
 

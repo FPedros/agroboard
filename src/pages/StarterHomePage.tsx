@@ -1,13 +1,8 @@
 import { useMemo, useRef, useState, type MouseEvent } from "react";
 import { AVAILABLE_YEARS, MONTH_LABELS, PRODUCTS, getMetricByMonth, type ProductId } from "@/lib/mockProducts";
+import { formatCurrencyBrlDashboard } from "@/lib/utils";
 
 const chartColors = ["#22C55E", "#14B8A6", "#38BDF8", "#F59E0B", "#EF4444", "#A78BFA"];
-
-const currencyFormatter = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-  maximumFractionDigits: 0,
-});
 
 const percentFormatter = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 1,
@@ -260,13 +255,13 @@ const StarterHomePage = () => {
           <p className="text-xs uppercase tracking-wide text-muted-foreground">
             Faturamento do mes ({selectedProduct?.name ?? "Todos"})
           </p>
-          <p className="mt-2 text-2xl font-semibold text-foreground">{currencyFormatter.format(monthRevenue)}</p>
+          <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrencyBrlDashboard(monthRevenue)}</p>
         </article>
         <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">
             Custo do mes ({selectedProduct?.name ?? "Todos"})
           </p>
-          <p className="mt-2 text-2xl font-semibold text-foreground">{currencyFormatter.format(monthCost)}</p>
+          <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrencyBrlDashboard(monthCost)}</p>
         </article>
         <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">

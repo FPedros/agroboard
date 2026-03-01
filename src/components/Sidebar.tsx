@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { House, Leaf, ChevronLeft, ChevronRight } from "lucide-react";
+import { House, CircleDollarSign, ChevronLeft, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -35,7 +35,7 @@ const Sidebar = () => {
           )}
         >
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Leaf className="h-6 w-6 text-primary" />
+            <CircleDollarSign className="h-6 w-6 text-primary" />
           </div>
           {!isCollapsed && (
             <div className="leading-tight">
