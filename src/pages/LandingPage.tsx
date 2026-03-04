@@ -149,7 +149,7 @@ const LandingPage = () => {
 
   return (
     <div
-      className="relative min-h-screen flex items-center justify-center overflow-hidden p-4"
+      className="relative min-h-screen flex items-center justify-center overflow-hidden p-[0.2rem]"
       style={{
         background: "linear-gradient(90deg, #202956 0%, #1A445F 50%, #008747 100%)",
       }}

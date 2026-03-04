@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   AGROVALORA_CLIENTS,
@@ -47,6 +47,7 @@ const LEGACY_BASE_HISTORY_FIELDS = [
 const agroValoraBasicStatusClassMap: Record<AgroValoraBasicPaymentStatus, string> = {
   Pago: "bg-emerald-100 text-emerald-800",
   "Aguardando pagamento": "bg-amber-100 text-amber-800",
+  "Em preenchimento": "bg-sky-100 text-sky-800",
   Cancelado: "bg-rose-100 text-rose-800",
 };
 
@@ -138,6 +139,17 @@ const formatBaseDate = (value: string) => {
   if (!year || !month || !day) return value;
   return `${day}/${month}/${year}`;
 };
+
+const formatOptionalBaseDate = (value: string | null | undefined) => (value ? formatBaseDate(value) : "Nao informado");
+
+const formatOptionalText = (value: string | null | undefined) => {
+  if (!value) return "Nao informado";
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : "Nao informado";
+};
+
+const formatOptionalCurrencyBrl = (value: number | null | undefined) =>
+  typeof value === "number" ? formatCurrencyBrl(value) : "Nao informado";
 
 const getSortedBaseHistory = (client: AgroTerraBaseRecord) =>
   Object.entries(client.baseHistory).sort(([firstDate], [secondDate]) => firstDate.localeCompare(secondDate));
@@ -308,7 +320,13 @@ const loadAgroValoraClients = (): AgroValoraClientRecord[] => {
     const validRecords = parsed
       .map((record) => toAgroValoraClientRecord(record))
       .filter((record): record is AgroValoraClientRecord => record !== null);
-    return validRecords.length > 0 ? validRecords : AGROVALORA_CLIENTS;
+    if (validRecords.length === 0) return AGROVALORA_CLIENTS;
+
+    const existingKeys = new Set(validRecords.map((record) => `${record.plan}:${record.name.toLowerCase()}`));
+    const missingDefaults = AGROVALORA_CLIENTS.filter(
+      (record) => !existingKeys.has(`${record.plan}:${record.name.toLowerCase()}`),
+    );
+    return [...validRecords, ...missingDefaults];
   } catch {
     return AGROVALORA_CLIENTS;
   }
@@ -480,6 +498,7 @@ const ProductDetailPage = () => {
   const [agroValoraBasicReports, setAgroValoraBasicReports] = useState<AgroValoraBasicReportRecord[]>([]);
   const [agroValoraBasicLoading, setAgroValoraBasicLoading] = useState(false);
   const [agroValoraBasicError, setAgroValoraBasicError] = useState("");
+  const [expandedAgroValoraReportId, setExpandedAgroValoraReportId] = useState<string | null>(null);
   const [agroValoraBasicClientFilter, setAgroValoraBasicClientFilter] = useState(ALL_FILTER_VALUE);
   const [agroValoraBasicRepresentativeFilter, setAgroValoraBasicRepresentativeFilter] =
     useState(ALL_FILTER_VALUE);
@@ -643,7 +662,7 @@ const ProductDetailPage = () => {
     (report) => report.paymentStatus === "Pago",
   ).length;
   const agroValoraBasicPendingCount = filteredAgroValoraBasicReports.filter(
-    (report) => report.paymentStatus === "Aguardando pagamento",
+    (report) => report.paymentStatus === "Aguardando pagamento" || report.paymentStatus === "Em preenchimento",
   ).length;
   const agroValoraBasicCanceledCount = filteredAgroValoraBasicReports.filter(
     (report) => report.paymentStatus === "Cancelado",
@@ -1289,7 +1308,7 @@ const ProductDetailPage = () => {
           ) : (
             <>
               <div className="mt-4 overflow-x-auto">
-                <table className="w-full min-w-[1320px] text-left text-sm">
+                <table className="w-full min-w-[1460px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-border text-muted-foreground">
                       <th className="px-3 py-2 font-medium">Registro</th>
@@ -1301,39 +1320,135 @@ const ProductDetailPage = () => {
                       <th className="px-3 py-2 font-medium">Data pagamento</th>
                       <th className="px-3 py-2 font-medium">Metodo pagamento</th>
                       <th className="px-3 py-2 font-medium">Prazo</th>
+                      <th className="px-3 py-2 font-medium">NF</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredAgroValoraBasicReports.map((report) => {
-                      const prazoDotClass = report.paymentStatus === "Cancelado" ? "bg-rose-500" : "bg-emerald-500";
+                      const prazoDotClass =
+                        report.paymentStatus === "Cancelado"
+                          ? "bg-rose-500"
+                          : report.paymentStatus === "Pago"
+                            ? "bg-emerald-500"
+                            : "bg-amber-500";
+
+                      const isExpanded = expandedAgroValoraReportId === report.registro;
+                      const invoiceDetails = report.invoiceDetails;
 
                       return (
-                        <tr key={report.registro} className="border-b border-border/60">
-                          <td className="px-3 py-2">{report.registro}</td>
-                          <td className="px-3 py-2">{report.solicitante}</td>
-                          <td className="px-3 py-2 font-medium text-foreground">{report.cliente}</td>
-                          <td className="px-3 py-2">{report.cpfCnpj}</td>
-                          <td className="px-3 py-2">{report.municipio}</td>
-                          <td className="px-3 py-2">
-                            <span
-                              className={`rounded px-2 py-1 text-xs font-semibold ${
-                                agroValoraBasicStatusClassMap[report.paymentStatus]
-                              }`}
-                            >
-                              {report.paymentStatus}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2">
-                            {report.paymentDate ? formatBaseDate(report.paymentDate) : "-"}
-                          </td>
-                          <td className="px-3 py-2">{report.paymentMethod ?? "-"}</td>
-                          <td className="px-3 py-2">
-                            <div className="flex items-center gap-2">
-                              <span className={`inline-block h-2.5 w-2.5 rounded-full ${prazoDotClass}`} />
-                              <span>{report.prazoDiasRestantes} dias restantes</span>
-                            </div>
-                          </td>
-                        </tr>
+                        <Fragment key={report.registro}>
+                          <tr className="border-b border-border/60">
+                            <td className="px-3 py-2">{report.registro}</td>
+                            <td className="px-3 py-2">{report.solicitante}</td>
+                            <td className="px-3 py-2 font-medium text-foreground">{report.cliente}</td>
+                            <td className="px-3 py-2">{report.cpfCnpj}</td>
+                            <td className="px-3 py-2">{report.municipio}</td>
+                            <td className="px-3 py-2">
+                              <span
+                                className={`rounded px-2 py-1 text-xs font-semibold ${
+                                  agroValoraBasicStatusClassMap[report.paymentStatus]
+                                }`}
+                              >
+                                {report.paymentStatus}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2">
+                              {report.paymentDate ? formatBaseDate(report.paymentDate) : "-"}
+                            </td>
+                            <td className="px-3 py-2">{report.paymentMethod ?? "-"}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`inline-block h-2.5 w-2.5 rounded-full ${prazoDotClass}`} />
+                                <span>{report.prazoDiasRestantes} dias restantes</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2">
+                              <button
+                                type="button"
+                                className="rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted/40"
+                                onClick={() =>
+                                  setExpandedAgroValoraReportId((current) =>
+                                    current === report.registro ? null : report.registro,
+                                  )
+                                }
+                              >
+                                {isExpanded ? "Ocultar NF" : "Ver NF"}
+                              </button>
+                            </td>
+                          </tr>
+
+                          {isExpanded && (
+                            <tr className="border-b border-border/60 bg-muted/10">
+                              <td colSpan={10} className="px-3 py-3">
+                                <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                                  <section className="rounded-lg border border-border bg-background/70 p-3">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                      Dados da NF
+                                    </p>
+                                    <dl className="mt-2 space-y-1 text-xs">
+                                      <div className="flex justify-between gap-2">
+                                        <dt className="text-muted-foreground">Numero</dt>
+                                        <dd>{formatOptionalText(invoiceDetails?.invoiceNumber)}</dd>
+                                      </div>
+                                      <div className="flex justify-between gap-2">
+                                        <dt className="text-muted-foreground">Serie</dt>
+                                        <dd>{formatOptionalText(invoiceDetails?.invoiceSeries)}</dd>
+                                      </div>
+                                      <div className="flex justify-between gap-2">
+                                        <dt className="text-muted-foreground">Emissao</dt>
+                                        <dd>{formatOptionalBaseDate(invoiceDetails?.invoiceIssueDate)}</dd>
+                                      </div>
+                                      <div className="flex justify-between gap-2">
+                                        <dt className="text-muted-foreground">Valor</dt>
+                                        <dd>{formatOptionalCurrencyBrl(invoiceDetails?.invoiceAmountBrl)}</dd>
+                                      </div>
+                                    </dl>
+                                  </section>
+
+                                  <section className="rounded-lg border border-border bg-background/70 p-3">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                      Contato faturamento
+                                    </p>
+                                    <dl className="mt-2 space-y-1 text-xs">
+                                      <div className="space-y-1">
+                                        <dt className="text-muted-foreground">Endereco</dt>
+                                        <dd>{formatOptionalText(invoiceDetails?.billingAddress)}</dd>
+                                      </div>
+                                      <div className="flex justify-between gap-2">
+                                        <dt className="text-muted-foreground">Telefone</dt>
+                                        <dd>{formatOptionalText(invoiceDetails?.billingPhone)}</dd>
+                                      </div>
+                                      <div className="flex justify-between gap-2">
+                                        <dt className="text-muted-foreground">E-mail</dt>
+                                        <dd>{formatOptionalText(invoiceDetails?.billingEmail)}</dd>
+                                      </div>
+                                    </dl>
+                                  </section>
+
+                                  <section className="rounded-lg border border-border bg-background/70 p-3">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                      Guia de pagamento
+                                    </p>
+                                    <dl className="mt-2 space-y-1 text-xs">
+                                      <div className="flex justify-between gap-2">
+                                        <dt className="text-muted-foreground">Numero da guia</dt>
+                                        <dd>{formatOptionalText(invoiceDetails?.paymentGuideNumber)}</dd>
+                                      </div>
+                                      <div className="flex justify-between gap-2">
+                                        <dt className="text-muted-foreground">Vencimento</dt>
+                                        <dd>{formatOptionalBaseDate(invoiceDetails?.paymentGuideDueDate)}</dd>
+                                      </div>
+                                      <div className="space-y-1">
+                                        <dt className="text-muted-foreground">Linha digitavel</dt>
+                                        <dd className="break-all">{formatOptionalText(invoiceDetails?.paymentGuideBarcode)}</dd>
+                                      </div>
+                                    </dl>
+                                  </section>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       );
                     })}
                   </tbody>

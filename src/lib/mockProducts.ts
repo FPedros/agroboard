@@ -56,9 +56,26 @@ export type AgroValoraClientRecord = {
   plan: AgroValoraPlan;
 };
 
-export type AgroValoraBasicPaymentStatus = "Pago" | "Aguardando pagamento" | "Cancelado";
+export type AgroValoraBasicPaymentStatus =
+  | "Pago"
+  | "Aguardando pagamento"
+  | "Em preenchimento"
+  | "Cancelado";
 
 export type AgroValoraBasicPaymentMethod = "PIX" | "Boleto" | "Cartao" | "Transferencia";
+
+export type AgroValoraBasicInvoiceDetails = {
+  invoiceNumber: string | null;
+  invoiceSeries: string | null;
+  invoiceIssueDate: string | null;
+  invoiceAmountBrl: number | null;
+  billingAddress: string | null;
+  billingPhone: string | null;
+  billingEmail: string | null;
+  paymentGuideNumber: string | null;
+  paymentGuideDueDate: string | null;
+  paymentGuideBarcode: string | null;
+};
 
 export type AgroValoraBasicReportRecord = {
   registro: string;
@@ -72,6 +89,7 @@ export type AgroValoraBasicReportRecord = {
   paymentDate: string | null;
   paymentMethod: AgroValoraBasicPaymentMethod | null;
   paidByClient: string | null;
+  invoiceDetails?: AgroValoraBasicInvoiceDetails;
 };
 
 type ProductDefinition = {
@@ -371,6 +389,11 @@ export const AGROVALORA_CLIENTS: AgroValoraClientRecord[] = [
     plan: "Basic",
   },
   {
+    id: 5,
+    name: "Banco Safra",
+    plan: "Basic",
+  },
+  {
     id: 3,
     name: "Bradesco",
     plan: "Plus",
@@ -384,140 +407,407 @@ export const AGROVALORA_CLIENTS: AgroValoraClientRecord[] = [
 
 export const AGROVALORA_BASIC_REPORTS: AgroValoraBasicReportRecord[] = [
   {
-    registro: "1.3.1.20260227.001",
+    registro: "8483",
     pacote: "Laudo Basic",
-    solicitante: "Santander Comercial83",
-    cliente: "Nasciagro Agronegocios Ltda",
-    cpfCnpj: "40.905.885/0001-92",
-    municipio: "N/A",
+    solicitante: "Santander Comercial20",
+    cliente: "Rani Evangelista Troncha Neto",
+    cpfCnpj: "944.170.831-34",
+    municipio: "Jau/SP",
     prazoDiasRestantes: 13,
-    paymentStatus: "Aguardando pagamento",
+    paymentStatus: "Em preenchimento",
     paymentDate: null,
     paymentMethod: null,
-    paidByClient: "Santander",
+    paidByClient: "Banco Safra",
   },
   {
-    registro: "1.3.1.20260227.002",
+    registro: "8482",
     pacote: "Laudo Basic",
-    solicitante: "Apoio Rural Planejamento Agropecuario Ltda",
-    cliente: "Antonio Cesar Carretero",
-    cpfCnpj: "295.120.128-12",
-    municipio: "N/A",
+    solicitante: "Engenhar Consultoria Agropecuaria E Florestal Ltda",
+    cliente: "Valmir Kampin Melo",
+    cpfCnpj: "744.803.165-15",
+    municipio: "Itabela/BA",
     prazoDiasRestantes: 13,
     paymentStatus: "Pago",
-    paymentDate: "2026-02-27",
+    paymentDate: "2025-07-09",
     paymentMethod: "PIX",
-    paidByClient: "Bradesco",
+    paidByClient: "Banco Safra",
   },
   {
-    registro: "1.3.1.20260227.003",
-    pacote: "Laudo Basic",
-    solicitante: "Romagnoli Projetos Ltda Me",
-    cliente: "Lucas Revoredo Penteado",
-    cpfCnpj: "302.708.118-77",
-    municipio: "N/A",
-    prazoDiasRestantes: 13,
-    paymentStatus: "Aguardando pagamento",
-    paymentDate: null,
-    paymentMethod: null,
-    paidByClient: "Bradesco",
-  },
-  {
-    registro: "1.3.1.20260227.004",
-    pacote: "Laudo Basic",
-    solicitante: "Gh Sustentavel Consultorias Agricolas Ltda",
-    cliente: "Carlos Alberto Ferreira Freire",
-    cpfCnpj: "432.044.306-34",
-    municipio: "N/A",
-    prazoDiasRestantes: 13,
-    paymentStatus: "Aguardando pagamento",
-    paymentDate: null,
-    paymentMethod: null,
-    paidByClient: "Bradesco",
-  },
-  {
-    registro: "1.3.1.20260227.005",
+    registro: "8481",
     pacote: "Laudo Basic",
     solicitante: "Jardel Cordovil Da Silva",
-    cliente: "Kassandra Lamare Vargas Leonel Soares Ferreira",
-    cpfCnpj: "278.414.216-72",
+    cliente: "Flavio Henrique Souza",
+    cpfCnpj: "015.902.246-04",
     municipio: "N/A",
     prazoDiasRestantes: 13,
-    paymentStatus: "Cancelado",
+    paymentStatus: "Em preenchimento",
     paymentDate: null,
     paymentMethod: null,
-    paidByClient: "Bradesco",
+    paidByClient: "Banco Safra",
   },
   {
-    registro: "1.3.1.20260227.006",
+    registro: "8480",
     pacote: "Laudo Basic",
-    solicitante: "J V Pantaleo Agronomia Ltda",
-    cliente: "Fabiano Antonio Da Silva",
-    cpfCnpj: "133.357.508-45",
+    solicitante: "Jardel Cordovil Da Silva",
+    cliente: "Emily Emanuelle Goncalves Morais",
+    cpfCnpj: "202.926.282-67",
     municipio: "N/A",
     prazoDiasRestantes: 13,
-    paymentStatus: "Pago",
-    paymentDate: "2026-02-27",
-    paymentMethod: "Transferencia",
-    paidByClient: "Bradesco",
+    paymentStatus: "Em preenchimento",
+    paymentDate: null,
+    paymentMethod: null,
+    paidByClient: "Banco Safra",
   },
   {
-    registro: "1.3.1.20260227.007",
+    registro: "8479",
     pacote: "Laudo Basic",
-    solicitante: "Mv Agricultura Ltda",
-    cliente: "Paulo Cesar Paschoim Leite",
-    cpfCnpj: "020.330.108-05",
-    municipio: "N/A",
+    solicitante: "Engenhar Consultoria Agropecuaria E Florestal Ltda",
+    cliente: "Valmir Kampin Melo",
+    cpfCnpj: "744.803.165-15",
+    municipio: "Itabela/BA",
     prazoDiasRestantes: 13,
     paymentStatus: "Pago",
-    paymentDate: "2026-02-27",
-    paymentMethod: "Boleto",
-    paidByClient: "Bradesco",
+    paymentDate: "2025-07-09",
+    paymentMethod: "PIX",
+    paidByClient: "Banco Safra",
   },
   {
-    registro: "1.3.1.20260227.008",
+    registro: "8478",
     pacote: "Laudo Basic",
-    solicitante: "Apoio Rural Planejamento Agropecuario Ltda",
-    cliente: "Marcos Leonardo Souza Da Costa Moura",
-    cpfCnpj: "249.231.251-87",
-    municipio: "N/A",
+    solicitante: "Dc Consultoria E Treinamento Ltda",
+    cliente: "Rivadavia Velho Correa Meyer",
+    cpfCnpj: "005.218.460-99",
+    municipio: "Mostardas/RS",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2025-07-09",
+    paymentMethod: "PIX",
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8477",
+    pacote: "Laudo Basic",
+    solicitante: "Agrozoocred - Assessoria E Planejamento Ltda",
+    cliente: "Cristiano De Mello Alvares",
+    cpfCnpj: "06.074.691/0002-35",
+    municipio: "Palmas/TO",
     prazoDiasRestantes: 13,
     paymentStatus: "Aguardando pagamento",
     paymentDate: null,
     paymentMethod: null,
-    paidByClient: "Bradesco",
+    paidByClient: "Banco Safra",
   },
   {
-    registro: "1.3.1.20260227.009",
+    registro: "8476",
     pacote: "Laudo Basic",
-    solicitante: "J V Pantaleo Agronomia Ltda",
-    cliente: "Jean Viais Pantaleao Viais Pantaleao",
-    cpfCnpj: "043.888.808-17",
-    municipio: "N/A",
+    solicitante: "Engenhar Consultoria Agropecuaria E Florestal Ltda",
+    cliente: "Valmir Kampin Melo",
+    cpfCnpj: "744.803.165-15",
+    municipio: "Itabela/BA",
     prazoDiasRestantes: 13,
     paymentStatus: "Pago",
-    paymentDate: "2026-02-27",
-    paymentMethod: "Cartao",
-    paidByClient: "Bradesco",
+    paymentDate: "2025-07-09",
+    paymentMethod: "PIX",
+    paidByClient: "Banco Safra",
   },
   {
-    registro: "1.3.1.20260227.010",
+    registro: "8475",
     pacote: "Laudo Basic",
-    solicitante: "Dc Consultoria E Treinamento Ltda",
-    cliente: "Pedro Alcantara Monteiro Neto",
-    cpfCnpj: "289.121.790-04",
-    municipio: "N/A",
+    solicitante: "Engenhar Consultoria Agropecuaria E Florestal Ltda",
+    cliente: "Valmir Kampin Melo",
+    cpfCnpj: "744.803.165-15",
+    municipio: "Itabela/BA",
     prazoDiasRestantes: 13,
-    paymentStatus: "Cancelado",
+    paymentStatus: "Pago",
+    paymentDate: "2025-07-09",
+    paymentMethod: "PIX",
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8474",
+    pacote: "Laudo Basic",
+    solicitante: "Engenhar Consultoria Agropecuaria E Florestal Ltda",
+    cliente: "Valmir Kampin Melo",
+    cpfCnpj: "744.803.165-15",
+    municipio: "Itabela/BA",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2025-07-09",
+    paymentMethod: "PIX",
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8473",
+    pacote: "Laudo Basic",
+    solicitante: "Avant Agro Planejamento Agropecuario Ltda",
+    cliente: "Carlos Braz De Oliveira Pires",
+    cpfCnpj: "070.733.991-04",
+    municipio: "Guaira/SP",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Aguardando pagamento",
     paymentDate: null,
     paymentMethod: null,
-    paidByClient: "Bradesco",
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8472",
+    pacote: "Laudo Basic",
+    solicitante: "Assessoria Agropecuaria Marcon Ltda",
+    cliente: "Valter Jose Potter",
+    cpfCnpj: "013.180.000-97",
+    municipio: "Dom Pedrito/RS",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Aguardando pagamento",
+    paymentDate: null,
+    paymentMethod: null,
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8471",
+    pacote: "Laudo Basic",
+    solicitante: "Certa Consultoria Extensao Rural E Tecnicas Agro",
+    cliente: "Pedro Resende De Oliveira",
+    cpfCnpj: "018.997.961-50",
+    municipio: "Piraquara/GO",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2025-07-08",
+    paymentMethod: "PIX",
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8470",
+    pacote: "Laudo Basic",
+    solicitante: "Di-Bio Solucoes Agroambientais Ltda",
+    cliente: "Valdo Angelo Citra Junior",
+    cpfCnpj: "295.624.468-08",
+    municipio: "N/A",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Em preenchimento",
+    paymentDate: null,
+    paymentMethod: null,
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8469",
+    pacote: "Laudo Basic",
+    solicitante: "Mdm Consultoria Ambiental E Planejamento Agropecuario",
+    cliente: "Jose Luiz Sebastiani",
+    cpfCnpj: "159.919.549-68",
+    municipio: "Campos Novos/SC",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2025-07-08",
+    paymentMethod: "Cartao",
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8468",
+    pacote: "Laudo Basic",
+    solicitante: "Avant Agro Planejamento Agropecuario Ltda",
+    cliente: "Joao Carlos De Godoy",
+    cpfCnpj: "792.201.348-53",
+    municipio: "Apucarana/SP",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2025-07-08",
+    paymentMethod: "PIX",
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8467",
+    pacote: "Laudo Basic",
+    solicitante: "Fabio Henrique Da Fonseca E Cia Ltda",
+    cliente: "Antonio Claudio Maximiano",
+    cpfCnpj: "802.826.019-53",
+    municipio: "Apucarana/PR",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2025-07-08",
+    paymentMethod: "Cartao",
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8466",
+    pacote: "Laudo Basic",
+    solicitante: "Di-Bio Solucoes Agroambientais Ltda",
+    cliente: "Floresval Vivan",
+    cpfCnpj: "361.548.149-68",
+    municipio: "N/A",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Em preenchimento",
+    paymentDate: null,
+    paymentMethod: null,
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8465",
+    pacote: "Laudo Basic",
+    solicitante: "Agroconsult Consultoria Agropecuaria Ltda",
+    cliente: "Edson Augusto Fosch",
+    cpfCnpj: "344.434.601-87",
+    municipio: "Canarana/MT",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2025-07-08",
+    paymentMethod: "PIX",
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8464",
+    pacote: "Laudo Basic",
+    solicitante: "Dc Consultoria E Treinamento Ltda",
+    cliente: "Jeronimo Message Dutra",
+    cpfCnpj: "976.400.930-15",
+    municipio: "Santo Antonio Da Patrulha/RS",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2025-07-09",
+    paymentMethod: "PIX",
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8463",
+    pacote: "Laudo Basic",
+    solicitante: "Santander Comercial93",
+    cliente: "Andre Luiz Pacheco Azevedo",
+    cpfCnpj: "022.659.021-60",
+    municipio: "Porto Nacional/TO",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2025-07-08",
+    paymentMethod: "Cartao",
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8462",
+    pacote: "Laudo Basic",
+    solicitante: "Assistagro Agricultura Ltda",
+    cliente: "Gilmar Scariot",
+    cpfCnpj: "354.447.460-34",
+    municipio: "Lagoa Vermelha/RS",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2025-07-08",
+    paymentMethod: "PIX",
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8461",
+    pacote: "Laudo Basic",
+    solicitante: "Santander Comercial43",
+    cliente: "Manoel Martin",
+    cpfCnpj: "395.195.387-04",
+    municipio: "Sao Felipe D Oeste/RO",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Aguardando pagamento",
+    paymentDate: null,
+    paymentMethod: null,
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8460",
+    pacote: "Laudo Basic",
+    solicitante: "Assistagro Agricultura Ltda",
+    cliente: "Gustavo Pelisser Crestani",
+    cpfCnpj: "038.479.400-90",
+    municipio: "Lagoa Vermelha/RS",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Aguardando pagamento",
+    paymentDate: null,
+    paymentMethod: null,
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8459",
+    pacote: "Laudo Basic",
+    solicitante: "F&M Comercializacao E Importacao Ltda",
+    cliente: "Wilson Fernandes Da Silva",
+    cpfCnpj: "709.430.608-34",
+    municipio: "Nossa Senhora Do Livramento/MT",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2025-07-08",
+    paymentMethod: "Cartao",
+    paidByClient: "Banco Safra",
+  },
+  {
+    registro: "8458",
+    pacote: "Laudo Basic",
+    solicitante: "Agroconsult Consultoria Agropecuaria Ltda",
+    cliente: "Iron Francisco Da Silva",
+    cpfCnpj: "950.759.289-87",
+    municipio: "Nova Xavantina/MT",
+    prazoDiasRestantes: 13,
+    paymentStatus: "Pago",
+    paymentDate: "2025-07-08",
+    paymentMethod: "PIX",
+    paidByClient: "Banco Safra",
   },
 ];
 
+const AGROVALORA_BILLING_CONTACTS: Record<
+  string,
+  { billingAddress: string; billingPhone: string; billingEmail: string }
+> = {
+  "Banco Safra": {
+    billingAddress: "Av. Paulista, 2100 - Bela Vista, Sao Paulo - SP",
+    billingPhone: "+55 (11) 3175-8248",
+    billingEmail: "cobranca.empresas@safra.com.br",
+  },
+  Bradesco: {
+    billingAddress: "Cidade de Deus, s/n - Vila Yara, Osasco - SP",
+    billingPhone: "+55 (11) 3684-7022",
+    billingEmail: "cobranca.empresas@bradesco.com.br",
+  },
+  Santander: {
+    billingAddress: "Av. Pres. Juscelino Kubitschek, 2041 - Sao Paulo - SP",
+    billingPhone: "+55 (11) 3012-3336",
+    billingEmail: "cobranca.empresas@santander.com.br",
+  },
+};
+
+const buildDefaultDueDate = (prazoDiasRestantes: number) => {
+  const baseDate = new Date("2025-07-09T00:00:00");
+  baseDate.setDate(baseDate.getDate() + Math.max(prazoDiasRestantes, 0));
+  return baseDate.toISOString().slice(0, 10);
+};
+
+const buildPaymentGuideBarcode = (registro: string) => {
+  const digits = registro.replace(/\D/g, "");
+  return digits.padEnd(44, "0").slice(0, 44);
+};
+
+const buildAgroValoraInvoiceDetails = (
+  report: AgroValoraBasicReportRecord,
+): AgroValoraBasicInvoiceDetails => {
+  const contact = AGROVALORA_BILLING_CONTACTS[report.paidByClient ?? ""] ?? {
+    billingAddress: "Nao informado",
+    billingPhone: "Nao informado",
+    billingEmail: "nao-informado@agrovalora.local",
+  };
+  const dueDate = report.paymentDate ?? buildDefaultDueDate(report.prazoDiasRestantes);
+
+  return {
+    invoiceNumber: `NF-${report.registro}`,
+    invoiceSeries: "1",
+    invoiceIssueDate: report.paymentDate ?? "2025-07-09",
+    invoiceAmountBrl: 450,
+    billingAddress: contact.billingAddress,
+    billingPhone: contact.billingPhone,
+    billingEmail: contact.billingEmail,
+    paymentGuideNumber: `GUIA-${report.registro}`,
+    paymentGuideDueDate: dueDate,
+    paymentGuideBarcode: buildPaymentGuideBarcode(report.registro),
+  };
+};
+
 export const fetchAgroValoraBasicReports = async (): Promise<AgroValoraBasicReportRecord[]> => {
   await new Promise((resolve) => setTimeout(resolve, 220));
-  return AGROVALORA_BASIC_REPORTS.map((report) => ({ ...report }));
+  return AGROVALORA_BASIC_REPORTS.map((report) => ({
+    ...report,
+    invoiceDetails: report.invoiceDetails ?? buildAgroValoraInvoiceDetails(report),
+  }));
 };
 
 export const PRODUCT_IDS = PRODUCTS.map((product) => product.id);
